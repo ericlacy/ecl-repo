@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Apple Notes Organizer</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Inter", system-ui, -apple-system, sans-serif;
+        background: #f5f6fb;
+        color: #1a1d26;
+      }
+      body {
+        margin: 0;
+      }
+      header {
+        background: #1c2434;
+        color: #fff;
+        padding: 24px 32px;
+      }
+      header h1 {
+        margin: 0 0 6px;
+        font-size: 1.6rem;
+      }
+      header p {
+        margin: 0;
+        opacity: 0.85;
+      }
+      main {
+        padding: 32px;
+        display: grid;
+        gap: 24px;
+      }
+      .card {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(24, 39, 75, 0.08);
+        padding: 24px;
+      }
+      .controls {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      label {
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+      input,
+      select,
+      button {
+        margin-top: 6px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid #d8dce7;
+        font-size: 0.95rem;
+      }
+      button {
+        background: #2563eb;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button.secondary {
+        background: #e2e8f0;
+        color: #1a1d26;
+      }
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .table th,
+      .table td {
+        text-align: left;
+        padding: 12px 10px;
+        border-bottom: 1px solid #eef1f7;
+        vertical-align: top;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        background: #eef2ff;
+        color: #3730a3;
+        border-radius: 999px;
+        font-size: 0.8rem;
+      }
+      .confidence {
+        font-weight: 600;
+      }
+      .muted {
+        color: #5b6475;
+        font-size: 0.9rem;
+      }
+      .grid-two {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      }
+      .status {
+        padding: 12px 14px;
+        border-radius: 10px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Apple Notes Organizer</h1>
+      <p>Automatically suggest folders and export a clean file tree of your notes.</p>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>Export controls</h2>
+        <div class="controls">
+          <div>
+            <label for="outputDir">Output directory</label>
+            <input id="outputDir" type="text" value="notes-export" />
+          </div>
+          <div>
+            <label for="format">Export format</label>
+            <select id="format">
+              <option value="markdown">Markdown</option>
+              <option value="text">Text</option>
+              <option value="html">HTML</option>
+            </select>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="exportButton">Export notes</button>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="assessButton" class="secondary">Assess folders</button>
+          </div>
+        </div>
+        <p class="muted">The organizer recommends folders based on note content. Review suggestions below before exporting.</p>
+        <div id="exportStatus" class="status" hidden></div>
+      </section>
+
+      <section class="card">
+        <h2>Suggested folder overview</h2>
+        <div id="assessment" class="grid-two"></div>
+      </section>
+
+      <section class="card">
+        <h2>Notes and suggestions</h2>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Current folder</th>
+              <th>Suggested folder</th>
+              <th>Confidence</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="notesTable"></tbody>
+        </table>
+      </section>
+    </main>
+
+    <script>
+      const notesTable = document.getElementById("notesTable");
+      const assessment = document.getElementById("assessment");
+      const exportButton = document.getElementById("exportButton");
+      const assessButton = document.getElementById("assessButton");
+      const exportStatus = document.getElementById("exportStatus");
+      const outputDir = document.getElementById("outputDir");
+      const format = document.getElementById("format");
+
+      let notes = [];
+      let folders = [];
+
+      function renderNotes() {
+        notesTable.innerHTML = "";
+        notes.forEach((note) => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${note.title}</td>
+            <td>${note.folder || "Uncategorized"}</td>
+            <td>
+              <select data-title="${note.title}">
+                ${folders
+                  .concat(note.suggested_folder)
+                  .filter((value, index, self) => self.indexOf(value) === index)
+                  .map(
+                    (folder) =>
+                      `<option value="${folder}" ${
+                        folder === note.suggested_folder ? "selected" : ""
+                      }>${folder}</option>`
+                  )
+                  .join("")}
+              </select>
+            </td>
+            <td class="confidence">${note.confidence.toFixed(2)}</td>
+            <td class="muted">${note.reason}</td>
+          `;
+          notesTable.appendChild(row);
+        });
+      }
+
+      async function loadNotes() {
+        const response = await fetch("/api/notes");
+        const data = await response.json();
+        notes = data.notes;
+        folders = data.folders;
+        renderNotes();
+      }
+
+      async function assessFolders() {
+        const response = await fetch("/api/assess");
+        const data = await response.json();
+        assessment.innerHTML = "";
+        data.buckets.forEach((bucket) => {
+          const card = document.createElement("div");
+          card.className = "status";
+          card.innerHTML = `
+            <div class="badge">${bucket.folder}</div>
+            <p><strong>${bucket.count}</strong> notes</p>
+            <p class="muted">Avg confidence ${bucket.avg_confidence}</p>
+          `;
+          assessment.appendChild(card);
+        });
+      }
+
+      async function exportNotes() {
+        const selects = notesTable.querySelectorAll("select");
+        const overrides = {};
+        selects.forEach((select) => {
+          overrides[select.dataset.title] = select.value;
+        });
+
+        const response = await fetch("/api/export", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            output_dir: outputDir.value,
+            format: format.value,
+            overrides,
+          }),
+        });
+
+        const data = await response.json();
+        exportStatus.hidden = false;
+        exportStatus.textContent = `Exported ${data.count} notes to ${data.output_dir}`;
+      }
+
+      exportButton.addEventListener("click", exportNotes);
+      assessButton.addEventListener("click", assessFolders);
+
+      loadNotes();
+      assessFolders();
+    </script>
+  </body>
+</html>
